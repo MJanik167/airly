@@ -1,0 +1,240 @@
+
+```{r}
+
+library(httr)
+library(jsonlite) 
+
+```
+
+```{r}
+#do pobrania samych stacji jakie są
+#wzielam srodek Krakowa jako wspolrzedne (50.04666667N, 20.00486111E) i odleglosc 25km, zeby Nowa Hute tez na pewno lapało
+
+r <- GET("https://airapi.airly.eu/v2/installations/nearest?lat=50.04666667&lng=20.00486111&maxDistanceKM=25&maxResults=-1", 
+         add_headers(apikey = "pExKFH0jLUoTd1ZuOW4JtoABjv4ge3j1", Accept = "application/json")
+)
+```
+
+```{r}
+jsonRespText<-content(r,as="text")
+lista_czujnikow<-fromJSON(jsonRespText)
+
+#tworzymy ramkę df - z danymi o lokalizacji, wysokości i id czjników
+longitude<-lista_czujnikow$location$longitude
+latitude<-lista_czujnikow$location$latitude
+df_czujniki<-data.frame(longitude,latitude)
+df_czujniki$elevation<-lista_czujnikow$elev #wysokość nie bedzie potrzebna, ale niech będzie
+df_czujniki$id<-lista_czujnikow$id
+head(df_czujniki)
+#View(df_czujniki)
+```
+
+
+```{r}
+#tak jak poprzednim razem, tworzymy obiekt przestrzenny (ppp)
+#install.packages("sp")
+library(sp)
+#install.packages("spatstat")
+library(spatstat)
+data_spat<-data.frame(lon=df_czujniki$longitude,lat=df_czujniki$latitude,elev=df_czujniki$elev,id=df_czujniki$id)
+coordinates(data_spat) <- ~lon+lat #określamy, które elementy to koordynaty (potrzebne do ppp)
+proj4string(data_spat) <- CRS("+proj=longlat +datum=WGS84") #określamy, jaki mamy układ
+head(data_spat) # mamy już obiekt w układzie sferycznym, który można automatycznie konwertować
+
+#konwersja do UTM (bo tworzymy ppp, a to jego układ)
+data_UTM <- spTransform(data_spat, CRS("+proj=utm +zone=34 +datum=WGS84"))
+
+#aby utworzyć obiekt ppp, ale tylko z czujnikami w Krakowie, musimy mieć kontur Krakowa, którym przytniemy data_UTM 
+#tworzymy więc odpowiedni obiekt w ukłądzie UTM (zmienna krakowUTM)
+#install.packages("sf")
+library(sf)
+dzielnice<-st_read("dzielnice_Krakowa.shp") #układ odniesienia(CRS) to ETRS89 (Poland CS92)
+# konwertujemy do WGS84
+dzielniceWGS84<-st_transform(dzielnice,crs = 4326) # "4326" to kod dla WGS84
+# zostawiamy tylko kontur miasta 
+krakowWGS84<-st_union(dzielniceWGS84)
+#konwertujemy go na UTM
+krakowUTM<-st_transform(krakowWGS84,CRS("+proj=utm +zone=34 +datum=WGS84"))
+
+#teraz możemy już utworzyć obiekt ppp z danymi ("marks") w punktach (uwaga: dane to id), przycięcie oknem krakowUTM
+#jeszcze zmienna pomocnicza z koordynatami (bo spTransform wprowadza swoje nazwy kolumn z koordynatami)
+XY<-coordinates(data_UTM)
+#i obiekt ppp 2D:
+czujniki_ppp_id<-ppp(x=XY[,1],y=XY[,2],marks=data.frame(elev=data_UTM$elev,id=data_UTM$id),window=as.owin(krakowUTM))
+czujniki_ppp_id$marks$id #mamy od razu tylko te id które są w Krakowie
+
+```
+
+
+```{r}
+n_id<-length(czujniki_ppp_id$marks$id)
+n_id
+### id czujników
+id<-czujniki_ppp_id$marks$id
+id
+list_inst2 <- vector(mode = "list", length = n_id)
+```
+```{r}
+for (i in seq(1,n_id)) {
+  
+  print(i) #to tylko pomocniczo, żeby wiedzieć, który obrót pętli
+  #tworzymy ciąg znaków określajacy adres, pod kótrym znajdują się pomiary z czujnika
+  str<-paste("https://airapi.airly.eu/v2/measurements/installation?installationId=",id[i],sep="")
+  #pobieramy dane z adresu
+  r <- GET(url=str,add_headers(apikey = "pExKFH0jLUoTd1ZuOW4JtoABjv4ge3j1", Accept = "application/json"))
+  #przechodzimy z formatu r na json i z json na tekst
+  jsonRespText<-content(r,as="text")
+  inst<-fromJSON(jsonRespText)
+  
+  list_inst2[[i]]<-inst #tutaj będą wszystkie odczyty
+  
+}
+```
+
+```{r}
+list_inst2[[2]]
+save(list_inst2,file = paste0("dane_",format(Sys.time(), "%Y-%m-%d_%H-%M"),".RData"))
+```
+
+
+```{r}
+#tu sprawdzam czy coś wychodzi
+
+list_inst2[[64]]$current
+```
+
+
+```{r}
+#zwizualizowanie jakie czujniki się pobrały
+
+data_spat<-data.frame(lon=df_czujniki$longitude,lat=df_czujniki$latitude,elev=df_czujniki$elevation)
+data_spat
+##określamy co jest koordynatami i projekcją w naszej ramce
+coordinates(data_spat) <- ~lon+lat #koordynaty
+proj4string(data_spat) <- CRS("+proj=longlat +datum=WGS84")#układ
+
+
+##konwersja do układu UTM
+data_UTM <- spTransform(data_spat, CRS("+proj=utm +zone=34 +datum=WGS84"))
+#zmienna pomocnicza z koordynatami (bo spTransform wprowadza swoje nazwy kolumn z koordynatami)
+
+
+
+krakow_sp <- as(krakowUTM, "Spatial")
+
+inside <- !is.na(over(data_UTM, krakow_sp))
+data_in <- data_UTM[inside, ]
+
+XY<-coordinates(data_in)
+
+## wreszcie możemy utworzyć obiekt ppp 2D (przycinamy dane oknem krakowUTM)
+data15_ppp<-ppp(x=XY[,1],y=XY[,2],window=as.owin(krakowUTM))
+plot(data15_ppp)
+```
+
+
+```{r}
+emitory = ANTROPOPRESJA_emitory_pyłów_i_gazów
+emitory_df <- data.frame(
+  x = emitory$`X [PL-1992]`,
+  y = emitory$`Y [PL-1992]`,
+  id = emitory$OBJECTID
+)
+
+coordinates(emitory_df) <- ~x+y
+proj4string(emitory_df) <- CRS("+init=epsg:2180")
+
+emitory_UTM <- spTransform(
+  emitory_df,
+  CRS("+proj=utm +zone=34 +datum=WGS84 +units=m +no_defs")
+)
+
+
+XY2 <- coordinates(emitory_UTM)
+head(XY2)
+
+
+emitory_ppp <- ppp(
+  x = XY2[,1],
+  y = XY2[,2],
+  window=as.owin(krakowUTM)
+)
+
+plot(data15_ppp)
+plot(emitory_ppp, add=TRUE, pch=20, col='red')
+```
+```{r}
+library(dplyr)
+
+emitory_sf  <- st_as_sf(emitory_UTM)
+czujniki_sf <- st_as_sf(data_in)
+
+buf_distance=2500
+
+inrange <- st_is_within_distance(
+  czujniki_sf,
+  emitory_sf,
+  dist = buf_distance
+)
+
+em_count = lengths(inrange)
+
+
+emitory_by_czujnik <- lapply(seq_along(inrange), function(i) {
+  emitory_sf[inrange[[i]], ]
+})
+
+
+corr_df <- data.frame(
+  matrix(ncol = 4, nrow = 0)  # 3 columns, 0 rows
+)
+
+colnames(corr_df) <- c("id","PM10","PM25","emitery")
+
+
+
+for (i in 1:64) {
+  PM10 <- list_inst2[[i]]$current$values$value[list_inst2[[i]]$current$values$name == "PM10"]
+  PM25 <- list_inst2[[i]]$current$values$value[list_inst2[[i]]$current$values$name == "PM25"]
+
+  if (is.null(PM10) || length(PM10) == 0) PM10=-1
+  if (is.null(PM25) || length(PM25) == 0) PM25=-1
+  corr_df <- rbind(corr_df, data.frame(id = i, PM10=PM10, PM25=PM25, emitery=em_count[i]))
+}
+
+
+#ploty do wglądu
+
+# for (id in 1:64){
+#   plot(data15_ppp)
+#   plot(data15_ppp[id])
+#   plot(emitory_by_czujnik[[id]], pch=20,add=TRUE, col='blue')
+# }
+
+#jeżeli się nie zaznacza nic na plocie to znaczy że czujnik nie działa
+```
+
+
+```{r}
+corr_PM10 <- corr_df[,c("id","PM10","emitery")]
+filt_PM10 <- subset(corr_PM10, PM10 != -1)
+cor(x=filt_PM10$emitery,y=filt_PM10$PM10)
+cor.test(filt_PM10$emitery, filt_PM10$PM10, method = "pearson")
+plot(x=filt_PM10$emitery,y=filt_PM10$PM10)
+
+```
+```{r}
+corr_PM25 <- corr_df[,c("id","PM25","emitery")]
+filt_PM25 <- subset(corr_PM25, PM25 != -1)
+
+cor(x=filt_PM25$emitery,y=filt_PM25$PM25)
+cor.test(filt_PM25$emitery, filt_PM25$PM25, method = "pearson")
+plot(x=filt_PM25$emitery,y=filt_PM25$PM25)
+
+
+```
+
+
+
+
+
