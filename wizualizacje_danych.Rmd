@@ -1,0 +1,56 @@
+
+
+```{r}
+#tworzymy listę plików z danymi, aby móc je później wspólnie przetwarzać
+files <- list.files(pattern = "^dane_.*\\.RData$")
+files
+```
+```{r}
+#ładujemy teraz wszystkie pliki z listy files do środowiska i wpakowujemy do listy lista_danych
+lista_danych <- lapply(files, function(f) {
+  e <- new.env() #jakby wszystko pakować do Global Environment to by się dane nadpisywały
+  load(f, envir = e)
+  e$list_inst2
+})
+```
+
+```{r}
+#teraz tak działa odwoływanie się
+lista_danych[[1]][[30]]$current$values
+
+```
+
+
+
+```{r}
+#funckja tworząca wektor z wartościami PM2.5
+get_pm25 <- function(plik) {
+  n_id <- length(plik)
+  pm25 <- rep(NA,n_id)   # przygotowujemy wektor wyników
+  
+  for (i in seq(1,n_id)) {
+    inst <- plik[[i]]
+    
+    logic <- inst$current$values$name == "PM25"
+    
+    if (sum(logic) == 1) {
+      pm25[i] <- inst$current$values[logic,2]
+    }
+    
+  }
+  
+  
+  return(pm25)
+}
+```
+
+```{r}
+lista_pm25 <- lapply(lista_danych, get_pm25)
+
+
+#sprawdzenie
+lista_pm25[[1]][30]
+```
+
+
+
