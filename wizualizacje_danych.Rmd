@@ -5,6 +5,7 @@
 files <- list.files(pattern = "^dane_.*\\.RData$")
 files
 ```
+
 ```{r}
 #ładujemy teraz wszystkie pliki z listy files do środowiska i wpakowujemy do listy lista_danych
 lista_danych <- lapply(files, function(f) {
