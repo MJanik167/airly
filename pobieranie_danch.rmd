@@ -135,11 +135,23 @@ plot(data15_ppp)
 
 ```{r}
 emitory = ANTROPOPRESJA_emitory_pyłów_i_gazów
+zaklady = ANTROPOPRESJA_zakłady_przemysłowe
+zaklady <- zaklady %>%
+  filter(Typ %in% c("chemiczny", "metalurgiczny", "elektromechaniczny"))
 emitory_df <- data.frame(
   x = emitory$`X [PL-1992]`,
   y = emitory$`Y [PL-1992]`,
   id = emitory$OBJECTID
 )
+zaklady_df <- data.frame(
+  x = zaklady$`X [PL-1992]`,
+  y = zaklady$`Y [PL-1992]`,
+  id = zaklady$OBJECTID
+)
+
+nrow(emitory_df)
+emitory_df <-  rbind(emitory_df, zaklady_df)
+nrow(emitory_df)
 
 coordinates(emitory_df) <- ~x+y
 proj4string(emitory_df) <- CRS("+init=epsg:2180")
@@ -166,23 +178,19 @@ plot(emitory_ppp, add=TRUE, pch=20, col='red')
 ```{r}
 library(dplyr)
 
+
+
 emitory_sf  <- st_as_sf(emitory_UTM)
 czujniki_sf <- st_as_sf(data_in)
 
-buf_distance=2500
+dist_mat <- st_distance(czujniki_sf, emitory_sf)
+dist_mat <- as.numeric(dist_mat) 
+dim(dist_mat) <- c(nrow(czujniki_sf), nrow(emitory_sf)) 
+bandwidth <- 10000  # meters (your effective buffer size)
 
-inrange <- st_is_within_distance(
-  czujniki_sf,
-  emitory_sf,
-  dist = buf_distance
-)
+weights <- exp(-(dist_mat^2) / (2 * bandwidth^2))
 
-em_count = lengths(inrange)
-
-
-emitory_by_czujnik <- lapply(seq_along(inrange), function(i) {
-  emitory_sf[inrange[[i]], ]
-})
+czujniki_sf$emitory <- rowSums(weights)
 
 
 corr_df <- data.frame(
@@ -192,24 +200,15 @@ corr_df <- data.frame(
 colnames(corr_df) <- c("id","PM10","PM25","emitery")
 
 
-
 for (i in 1:64) {
   PM10 <- list_inst2[[i]]$current$values$value[list_inst2[[i]]$current$values$name == "PM10"]
   PM25 <- list_inst2[[i]]$current$values$value[list_inst2[[i]]$current$values$name == "PM25"]
-
+  
   if (is.null(PM10) || length(PM10) == 0) PM10=-1
   if (is.null(PM25) || length(PM25) == 0) PM25=-1
-  corr_df <- rbind(corr_df, data.frame(id = i, PM10=PM10, PM25=PM25, emitery=em_count[i]))
+  corr_df <- rbind(corr_df, data.frame(id = i, PM10=PM10, PM25=PM25, emitery=czujniki_sf$emitory[i]))
 }
 
-
-#ploty do wglądu
-
-# for (id in 1:64){
-#   plot(data15_ppp)
-#   plot(data15_ppp[id])
-#   plot(emitory_by_czujnik[[id]], pch=20,add=TRUE, col='blue')
-# }
 
 #jeżeli się nie zaznacza nic na plocie to znaczy że czujnik nie działa
 ```

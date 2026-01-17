@@ -27,7 +27,7 @@ lista_danych <- lapply(files, function(f) {
 
 ```{r}
 #teraz tak działa odwoływanie się
-lista_danych[[9]][[64]]$current$values
+lista_danych[[2]][[64]]$current$values
 
 
 ```
