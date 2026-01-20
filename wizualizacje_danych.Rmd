@@ -298,21 +298,18 @@ paleniska_ppp <- ppp(
   window=as.owin(krakowUTM)
 )
 
-plot(data15_ppp)
-plot(paleniska_ppp, add=TRUE, pch=20, col='red')
-
 
 ```
 ```{r}
 library(dplyr)
 
 paleniska_sf  <- st_as_sf(paleniska_UTM)
-czujniki_sf <- st_as_sf(data_in)
+czujniki_sf <- st_as_sf(czujniki_spdf)
 
 dist_mat <- st_distance(czujniki_sf, paleniska_sf)
 dist_mat <- as.numeric(dist_mat) 
 dim(dist_mat) <- c(nrow(czujniki_sf), nrow(paleniska_sf)) 
-bandwidth <- 2500  # max buffer w  metrach 
+bandwidth <- 1000  # max buffer w  metrach 
 
 weights <- exp(-(dist_mat^2) / (2 * bandwidth^2))
 
@@ -323,7 +320,7 @@ corr_df <- data.frame(
   matrix(ncol = 4, nrow = 0)  # 3 columns, 0 rows
 )
 
-colnames(corr_df) <- c("id","PM10","PM25","paleniska")
+colnames(corr_df) <- c("PM25","paleniska","pora")
 
 pm25_rano <- c(
   "pm25_04_8",  
@@ -334,8 +331,8 @@ pm25_rano <- c(
 for (colname in pm25_rano) {
   miss_vec <- miss[[paste0("miss_", colname)]]
   PM25 <- czujniki_spdf[!miss_vec,colname]
-  
-  czujniki_sf$paleniska[!miss_vec]
+  length(PM25)
+  czujniki_sf$paleniska
   
   corr_df <- rbind(corr_df, data.frame(PM25 = PM25[[1]],pora = "rano", paleniska = czujniki_sf$paleniska[!miss_vec]))
 }
@@ -387,8 +384,17 @@ for (colname in pm25_wieczor) {
 # }
 #}
 
+```
 
 
+```{r}
+library(ggplot2)
+ggplot()+
+  geom_sf(data = krakowUTM, fill = "lightblue")+
+  geom_sf(data = st_buffer(paleniska_sf, dist = bandwidth), fill="lightgreen",color=NA)+
+  geom_sf(data = czujniki_sf, color = "black")+
+  geom_sf(data = paleniska_sf, color = "red")+
+  theme_bw()
 
 ```
 
