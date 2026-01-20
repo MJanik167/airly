@@ -6,6 +6,7 @@ library(spatstat)
 library(sf)
 library(automap)
 library(tmaptools)
+library(ggplot)
 
 ```
 
@@ -274,6 +275,163 @@ for (colname in pm25_names) {
 
 
 ```{r}
-plot(PM25_auto)
+paleniska<-st_read("Potencjalnie_czynne_paleniska_w_2025.shp")
+
+
+paleniska92<-st_transform(paleniska,crs = 2180)
+centroids <- st_centroid(paleniska92)
+paleniska_df <- cbind(st_coordinates(centroids),st_drop_geometry(centroids))
+
+coordinates(paleniska_df) <- ~X+Y
+proj4string(paleniska_df) <- CRS("+init=epsg:2180")
+
+paleniska_UTM <- spTransform(
+  paleniska_df,
+  CRS("+proj=utm +zone=34 +datum=WGS84 +units=m +no_defs")
+)
+
+XY2 <- coordinates(paleniska_UTM)
+
+paleniska_ppp <- ppp(
+  x = XY2[,1],
+  y = XY2[,2],
+  window=as.owin(krakowUTM)
+)
+
+plot(data15_ppp)
+plot(paleniska_ppp, add=TRUE, pch=20, col='red')
+
+
 ```
+```{r}
+library(dplyr)
+
+paleniska_sf  <- st_as_sf(paleniska_UTM)
+czujniki_sf <- st_as_sf(data_in)
+
+dist_mat <- st_distance(czujniki_sf, paleniska_sf)
+dist_mat <- as.numeric(dist_mat) 
+dim(dist_mat) <- c(nrow(czujniki_sf), nrow(paleniska_sf)) 
+bandwidth <- 2500  # max buffer w  metrach 
+
+weights <- exp(-(dist_mat^2) / (2 * bandwidth^2))
+
+czujniki_sf$paleniska <- rowSums(weights)
+
+
+corr_df <- data.frame(
+  matrix(ncol = 4, nrow = 0)  # 3 columns, 0 rows
+)
+
+colnames(corr_df) <- c("id","PM10","PM25","paleniska")
+
+pm25_rano <- c(
+  "pm25_04_8",  
+  "pm25_09_8",  
+  "pm25_12_8" 
+)
+
+for (colname in pm25_rano) {
+  miss_vec <- miss[[paste0("miss_", colname)]]
+  PM25 <- czujniki_spdf[!miss_vec,colname]
+  
+  czujniki_sf$paleniska[!miss_vec]
+  
+  corr_df <- rbind(corr_df, data.frame(PM25 = PM25[[1]],pora = "rano", paleniska = czujniki_sf$paleniska[!miss_vec]))
+}
+
+
+pm25_popoludniu <- c(
+  "pm25_04_16",  
+  "pm25_09_16",  
+  "pm25_12_16" 
+)
+
+for (colname in pm25_popoludniu) {
+  miss_vec <- miss[[paste0("miss_", colname)]]
+  PM25 <- czujniki_spdf[!miss_vec,colname]
+  
+  czujniki_sf$paleniska[!miss_vec]
+  
+  corr_df <- rbind(corr_df, data.frame(PM25 = PM25[[1]],pora = "ppl", paleniska = czujniki_sf$paleniska[!miss_vec]))
+}
+
+
+pm25_wieczor <- c(
+  "pm25_04_21",  
+  "pm25_09_21",  
+  "pm25_12_21"
+)
+
+for (colname in pm25_wieczor) {
+  miss_vec <- miss[[paste0("miss_", colname)]]
+  PM25 <- czujniki_spdf[!miss_vec,colname]
+  
+  czujniki_sf$paleniska[!miss_vec]
+  
+  corr_df <- rbind(corr_df, data.frame(PM25 = PM25[[1]],pora = "wieczor", paleniska = czujniki_sf$paleniska[!miss_vec]))
+}
+
+
+
+
+
+#for (k in 1:10){
+#  for (i in 1:64) {
+#    PM10 <- lista_danych[[k]][[i]]$current$values$value[list_inst2[[i]]$current$values$name == "PM10"]
+#    PM25 <- lista_danych[[k]][[i]]$current$values$value[list_inst2[[i]]$current$values$name == "PM25"]
+#    
+#    if (is.null(PM10) || length(PM10) == 0) PM10=-1
+#    if (is.null(PM25) || length(PM25) == 0) PM25=-1
+#    corr_df <- rbind(corr_df, data.frame(id = i, PM10=PM10, PM25=PM25, emitery=czujniki_sf$paleniska[i]))
+# }
+#}
+
+
+
+
+```
+
+```{r}
+corr_PM25 <- corr_df[,c("PM25","paleniska")]
+filt_PM25 <- subset(corr_PM25)
+filt_PM25
+
+cor(x=filt_PM25$paleniska,y=filt_PM25$PM25)
+cor.test(filt_PM25$paleniska, filt_PM25$PM25, method = "pearson")
+plot(x=filt_PM25$paleniska,y=filt_PM25$PM25)
+
+```
+```{r}
+corr_PM25 <- corr_df[,c("PM25","paleniska","pora")]
+filt_PM25 <- subset(corr_PM25, pora=="rano")
+filt_PM25
+
+cor(x=filt_PM25$paleniska,y=filt_PM25$PM25)
+cor.test(filt_PM25$paleniska, filt_PM25$PM25, method = "pearson")
+plot(x=filt_PM25$paleniska,y=filt_PM25$PM25)
+
+```
+```{r}
+corr_PM25 <- corr_df[,c("PM25","paleniska","pora")]
+filt_PM25 <- subset(corr_PM25, pora=="ppl")
+filt_PM25
+
+cor(x=filt_PM25$paleniska,y=filt_PM25$PM25)
+cor.test(filt_PM25$paleniska, filt_PM25$PM25, method = "pearson")
+plot(x=filt_PM25$paleniska,y=filt_PM25$PM25)
+
+```
+
+```{r}
+corr_PM25 <- corr_df[,c("PM25","paleniska","pora")]
+filt_PM25 <- subset(corr_PM25, pora=="wieczor")
+filt_PM25
+
+cor(x=filt_PM25$paleniska,y=filt_PM25$PM25)
+cor.test(filt_PM25$paleniska, filt_PM25$PM25, method = "pearson")
+plot(x=filt_PM25$paleniska,y=filt_PM25$PM25)
+
+```
+
 
