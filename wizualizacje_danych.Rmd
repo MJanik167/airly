@@ -6,7 +6,7 @@ library(spatstat)
 library(sf)
 library(automap)
 library(tmaptools)
-library(ggplot)
+library(ggplot2)
 
 ```
 
@@ -437,6 +437,92 @@ filt_PM25
 cor(x=filt_PM25$paleniska,y=filt_PM25$PM25)
 cor.test(filt_PM25$paleniska, filt_PM25$PM25, method = "pearson")
 plot(x=filt_PM25$paleniska,y=filt_PM25$PM25)
+
+```
+
+
+
+
+```{r}
+# dane o wietrze
+
+wiatr_4 <- data.frame(
+  time = pogoda_2026.01.04$Time,
+  direction = pogoda_2026.01.04$Wind,
+  speed_kmph = as.numeric(gsub(" mph", "", pogoda_2026.01.04$Wind.Speed)) * 1.61,   # zamiana mph na kmph
+  stringsAsFactors = FALSE
+)
+
+wiatr_9 <- data.frame(
+  time = pogoda_2026.01.09$Time,
+  direction = pogoda_2026.01.09$Wind,
+  speed_kmph = as.numeric(gsub(" mph", "", pogoda_2026.01.09$Wind.Speed)) * 1.61,   
+  stringsAsFactors = FALSE
+)
+
+wiatr_12 <- data.frame(
+  time = pogoda_2026.01.12$Time,
+  direction = pogoda_2026.01.12$Wind,
+  speed_kmph = as.numeric(gsub(" mph", "", pogoda_2026.01.12$Wind.Speed)) * 1.61,   
+  stringsAsFactors = FALSE
+)
+
+# zmiana na format 24-godzinny, zeby było jak po polskiemu
+to_24h <- function(x) format(strptime(x, format = "%I:%M %p"), "%H:%M")
+
+wiatr_4$time  <- to_24h(wiatr_4$time)
+wiatr_9$time  <- to_24h(wiatr_9$time)
+wiatr_12$time <- to_24h(wiatr_12$time)
+
+head(wiatr_4)
+head(wiatr_9)
+head(wiatr_12)
+```
+
+
+```{r}
+
+# wykresy prędkości i kierunków wiatru
+
+library(ggplot2)
+
+dir_deg <- c(
+  N=0, NNE=22.5, NE=45, ENE=67.5,
+  E=90, ESE=112.5, SE=135, SSE=157.5,
+  S=180, SSW=202.5, SW=225, WSW=247.5,
+  W=270, WNW=292.5, NW=315, NNW=337.5
+)
+
+plot_wind_arrows <- function(df, day_label) {
+
+  df$time_posix <- as.POSIXct(paste("2026-01-01", trimws(df$time)))  # ładna oś czasu
+
+  deg <- dir_deg[df$direction]
+  rad <- (270 - deg) * pi/180
+  Lx_sec <- 10 * 60
+  Ly     <- 0.5e
+  df$xend <- df$time_posix + cos(rad) * Lx_sec
+  df$yend <- df$speed_kmph + sin(rad) * Ly
+
+  ggplot(df, aes(x = time_posix, y = speed_kmph)) +
+    geom_line() +
+    geom_segment(
+      data = df[!is.na(deg) & !is.na(df$time_posix), ],
+      aes(xend = xend, yend = yend),
+      arrow = arrow(length = unit(0.25, "cm")),
+      color = "blue",
+      linewidth = 1.2
+    ) +
+    scale_x_datetime(date_labels = "%H:%M") +
+    labs(title = day_label, x = "Godzina", y = "Prędkość wiatru [km/h]") +
+    coord_cartesian(clip = "off") +
+    theme_bw()
+}
+
+print(plot_wind_arrows(wiatr_4,  "2026-01-04"))
+print(plot_wind_arrows(wiatr_9,  "2026-01-09"))
+print(plot_wind_arrows(wiatr_12, "2026-01-12"))
+
 
 ```
 
