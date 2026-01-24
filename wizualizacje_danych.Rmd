@@ -62,7 +62,17 @@ lista_pm25 <- lapply(lista_danych, get_pm25)
 
 
 #sprawdzenie
-lista_pm25[[1]][64]
+#lista_pm25[[1]][64]
+
+cz <- replicate(64, 0, simplify = FALSE)
+for (i in 1:10) {
+  print(i)
+  for (j in 1:64) {
+    if (!is.na(lista_pm25[[i]][j])) {
+      cz[[j]] <- cz[[j]] + lista_pm25[[i]][j]
+    }
+  }
+}
 ```
 
 ```{r}
@@ -129,7 +139,7 @@ pm25_names <- c(
 
 czujniki_spdf@data[pm25_names] <- lista_pm25
 #teraz mamy 9 dodatkowych kolumn z danymi
-head(czujniki_spdf)
+(czujniki_spdf)
 #View(czujniki_spdf@data)
 plot(czujniki_spdf)
 ```
@@ -145,9 +155,9 @@ miss <-lapply(pm25_names, function(colname) {
 
 
 for (row in seq_len(nrow(czujniki_spdf@data))){
-  if(rowSums(as.data.frame(czujniki_spdf@data[row,3:12]))<100 | rowSums(is.na(as.data.frame(czujniki_spdf@data[row,3:12]))) > 0 | row == 2){
+  if(row == 2 | row == 63){
        for( i in seq(1,length(miss))){
-         miss[[i]][row] = TRUE
+#        miss[[i]][row] = TRUE
        }
     }
 }
@@ -159,17 +169,17 @@ names(miss) <- paste0("miss_", pm25_names)
 miss
 
 for (colname in pm25_names){
-  miss_vec <- miss[[paste0("miss_", colname)]]
-  m<-sort(czujniki_spdf@data[!miss_vec,colname],decreasing = FALSE)[10]
-  w<-sort(czujniki_spdf@data[!miss_vec,colname],decreasing = TRUE)[3]
+  #miss_vec <- miss[[paste0("miss_", colname)]]
+  #m<-sort(czujniki_spdf@data[!miss_vec,colname],decreasing = FALSE)[10]
+  #w<-sort(czujniki_spdf@data[!miss_vec,colname],decreasing = TRUE)[3]
   for( r in  seq_len(nrow(czujniki_spdf@data))){
     
     if((czujniki_spdf@data[r,colname]<=m)| (czujniki_spdf@data[r,colname]>=w)|is.na(czujniki_spdf@data[r,colname])){
-      miss[[paste0("miss_", colname)]][r] <- TRUE
+      #miss[[paste0("miss_", colname)]][r] <- TRUE
       #print(r)
       #print(miss[[colname]][r])
     }else{
-      miss[[paste0("miss_", colname)]][r] <- FALSE
+      #miss[[paste0("miss_", colname)]][r] <- FALSE
     }
   }
 }
