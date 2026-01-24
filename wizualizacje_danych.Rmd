@@ -73,6 +73,15 @@ for (i in 1:10) {
     }
   }
 }
+
+
+for (i in 1:10){
+    lista_pm25[[i]][2] <- NA
+    lista_pm25[[i]][63] <- NA
+    lista_pm25[[i]][23] <- NA
+    
+}
+
 ```
 
 ```{r}
