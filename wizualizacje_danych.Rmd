@@ -30,7 +30,6 @@ lista_danych <- lapply(files, function(f) {
 #teraz tak działa odwoływanie się
 lista_danych[[2]][[6]]$current$values
 
-
 ```
 
 
@@ -65,7 +64,7 @@ lista_pm25 <- lapply(lista_danych, get_pm25)
 #lista_pm25[[1]][64]
 
 cz <- replicate(64, 0, simplify = FALSE)
-for (i in 1:10) {
+for (i in 1:9) {
   print(i)
   for (j in 1:64) {
     if (!is.na(lista_pm25[[i]][j])) {
@@ -75,11 +74,11 @@ for (i in 1:10) {
 }
 
 
-for (i in 1:10){
+for (i in 1:9){
     lista_pm25[[i]][2] <- NA
-    lista_pm25[[i]][63] <- NA
-    lista_pm25[[i]][23] <- NA
-    
+#    lista_pm25[[i]][63] <- NA
+#    lista_pm25[[i]][23] <- NA
+#    
 }
 
 ```
@@ -92,6 +91,9 @@ r <- GET("https://airapi.airly.eu/v2/installations/nearest?lat=50.04666667&lng=2
          add_headers(apikey = "TAScUh3ZHNuoMD3VgAr1NhuDyT9KbwW3", Accept = "application/json")
 )
 ```
+
+
+
 
 ```{r}
 jsonRespText<-content(r,as="text")
@@ -143,7 +145,7 @@ proj4string(czujniki_spdf) <- CRS("+proj=utm +zone=34 +datum=WGS84") # układ od
 pm25_names <- c(
   "pm25_04_8",  "pm25_04_16",  "pm25_04_21",
   "pm25_09_8",  "pm25_09_16",  "pm25_09_21",
-  "pm25_12_8",  "pm25_12_16",  "pm25_12_21", "pm25_14_20"
+  "pm25_12_8",  "pm25_12_16",  "pm25_12_21"
 )
 
 czujniki_spdf@data[pm25_names] <- lista_pm25
@@ -153,6 +155,13 @@ czujniki_spdf@data[pm25_names] <- lista_pm25
 plot(czujniki_spdf)
 ```
 
+```{r}
+
+
+plot(krakowUTM, main = "Czujniki wykluczone z analizy")
+plot(czujniki_spdf, add = TRUE, pch = 16, col = "grey")
+points(czujniki_spdf[2, ], pch = 8, col = "red", cex = 1.5)
+```
 
 
 ```{r}
@@ -161,65 +170,65 @@ miss <-lapply(pm25_names, function(colname) {
   is.na(czujniki_spdf@data[[colname]])
     
 })
-
-
-for (row in seq_len(nrow(czujniki_spdf@data))){
-  if(row == 2 | row == 63){
-       for( i in seq(1,length(miss))){
-#        miss[[i]][row] = TRUE
-       }
-    }
-}
-
-
+# 
+# 
+# for (row in seq_len(nrow(czujniki_spdf@data))){
+#   if(row == 2 | row == 63){
+#        for( i in seq(1,length(miss))){
+# #        miss[[i]][row] = TRUE
+#        }
+#     }
+# }
+# 
+# 
 names(miss) <- paste0("miss_", pm25_names)
-
-
-miss
-
-for (colname in pm25_names){
-  #miss_vec <- miss[[paste0("miss_", colname)]]
-  #m<-sort(czujniki_spdf@data[!miss_vec,colname],decreasing = FALSE)[10]
-  #w<-sort(czujniki_spdf@data[!miss_vec,colname],decreasing = TRUE)[3]
-  for( r in  seq_len(nrow(czujniki_spdf@data))){
-    
-    if((czujniki_spdf@data[r,colname]<=m)| (czujniki_spdf@data[r,colname]>=w)|is.na(czujniki_spdf@data[r,colname])){
-      #miss[[paste0("miss_", colname)]][r] <- TRUE
-      #print(r)
-      #print(miss[[colname]][r])
-    }else{
-      #miss[[paste0("miss_", colname)]][r] <- FALSE
-    }
-  }
-}
-
-sum(miss[[colname]])
-```
-
-```{r}
+# 
+# 
+# miss
+# 
+# for (colname in pm25_names){
+#   #miss_vec <- miss[[paste0("miss_", colname)]]
+#   #m<-sort(czujniki_spdf@data[!miss_vec,colname],decreasing = FALSE)[10]
+#   #w<-sort(czujniki_spdf@data[!miss_vec,colname],decreasing = TRUE)[3]
+#   for( r in  seq_len(nrow(czujniki_spdf@data))){
+#     
+#     if((czujniki_spdf@data[r,colname]<=m)| (czujniki_spdf@data[r,colname]>=w)|is.na(czujniki_spdf@data[r,colname])){
+#       #miss[[paste0("miss_", colname)]][r] <- TRUE
+#       #print(r)
+#       #print(miss[[colname]][r])
+#     }else{
+#       #miss[[paste0("miss_", colname)]][r] <- FALSE
+#     }
+#   }
+# }
+# 
+# sum(miss[[colname]])
+# ```
+# 
+# ```{r}
 colname<-pm25_names[1]
-miss_vec <- miss[[paste0("miss_", colname)]]
-m<-sort(czujniki_spdf@data[!miss_vec,colname])[20]
-m
-for( r in  seq_len(nrow(czujniki_spdf@data))){
-  if((czujniki_spdf@data[r,1]<m)|is.na(czujniki_spdf@data[r,colname])){
-    miss[[colname]][r] <- TRUE
-    print(r)
-    print(miss[[colname]][r])
-  }else{
-    miss[[colname]][r] <- FALSE
-  }
-}
-sum(miss[[1]])
+# miss_vec <- miss[[paste0("miss_", colname)]]
+# m<-sort(czujniki_spdf@data[!miss_vec,colname])[20]
+# m
+# for( r in  seq_len(nrow(czujniki_spdf@data))){
+#   if((czujniki_spdf@data[r,1]<m)|is.na(czujniki_spdf@data[r,colname])){
+#     miss[[colname]][r] <- TRUE
+#     print(r)
+#     print(miss[[colname]][r])
+#   }else{
+#     miss[[colname]][r] <- FALSE
+#   }
+# }
+# sum(miss[[1]])
 ```
 
 ```{r}
-a<-as.data.frame(czujniki_spdf[!miss_vec,3:12])
-a<-a[1:10]
-working<-!(rowSums(a)<50 | is.na(rowSums(a)))
-working
-length(working)
-miss_vec
+# a<-as.data.frame(czujniki_spdf[!miss_vec,3:12])
+# a<-a[1:10]
+# working<-!(rowSums(a)<50 | is.na(rowSums(a)))
+# working
+# length(working)
+# miss_vec
 ```
 
 
@@ -261,18 +270,18 @@ colname <- "pm25_04_8"
 miss_vec <- miss[[paste0("miss_", colname)]]
 miss_vec
 czujniki_spdf[!miss_vec,]
-a<-as.data.frame( czujniki_spdf[!miss_vec,3:12] )
-a<-a[1:10]
-
-is.na(any(a))
-working<-(rowSums(a)<50  )
-working<-(working==FALSE | is.na(working))
-working  
-czujniki_spdf[!miss_vec,][working,]
-
-
-miss_vec<-miss[[2]]
-czujniki_spdf[!miss_vec,colname]
+# a<-as.data.frame( czujniki_spdf[!miss_vec,3:12] )
+# a<-a[1:10]
+# 
+# is.na(any(a))
+# working<-(rowSums(a)<50  )
+# working<-(working==FALSE | is.na(working))
+# working  
+# czujniki_spdf[!miss_vec,][working,]
+# 
+# 
+# miss_vec<-miss[[2]]
+# czujniki_spdf[!miss_vec,colname]
 
 ```
 
@@ -285,8 +294,9 @@ for (colname in pm25_names) {
   
   
   print(nrow(czujniki_spdf[!miss_vec,colname]))
-  print(plot(PM25_gauss$krige_output[1],main=colname))
+  print(plot(PM25_gauss$krige_output[1]))
   print(points(czujniki_ppp_id[!miss_vec,],pch="*",col="White"))
+#  print(points(czujniki_ppp_id[2,],pch="*",col="red"))
   print(plot(PM25_gauss))
 }
 
