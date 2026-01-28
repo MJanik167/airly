@@ -160,7 +160,7 @@ plot(czujniki_spdf)
 
 plot(krakowUTM, main = "Czujniki wykluczone z analizy")
 plot(czujniki_spdf, add = TRUE, pch = 16, col = "grey")
-points(czujniki_spdf[2, ], pch = 8, col = "red", cex = 1.5)
+points(czujniki_spdf[c(2,21), ], pch = 8, col = "red", cex = 1.5)
 ```
 
 
@@ -269,7 +269,7 @@ colname
 colname <- "pm25_04_8"
 miss_vec <- miss[[paste0("miss_", colname)]]
 miss_vec
-czujniki_spdf[!miss_vec,]
+czujniki_spdf[!miss_vec,]$pm25_09_8
 # a<-as.data.frame( czujniki_spdf[!miss_vec,3:12] )
 # a<-a[1:10]
 # 
@@ -284,6 +284,31 @@ czujniki_spdf[!miss_vec,]
 # czujniki_spdf[!miss_vec,colname]
 
 ```
+```{r}
+summary(czujniki_spdf[!miss_vec,])
+```
+
+```{r}
+library(osmdata)
+krakowWGS84 <- st_transform(krakowUTM, 4326)
+bbox <- st_bbox(krakowWGS84)
+
+main_roads <- c(
+  "motorway",
+  "trunk",
+  "primary",
+  "secondary",
+  "tertiary"
+)
+drogi <- opq(bbox = bbox, timeout = 180) |>
+  add_osm_feature(
+    key = "highway",
+    value = main_roads
+  ) |>
+  osmdata_sf()
+drogi_utm <- st_transform(drogi$osm_lines, st_crs(krakowUTM))
+drogi_krakow <- st_intersection(drogi_utm, krakowUTM)
+```
 
 ```{r}
 
@@ -295,8 +320,12 @@ for (colname in pm25_names) {
   
   print(nrow(czujniki_spdf[!miss_vec,colname]))
   print(plot(PM25_gauss$krige_output[1]))
+  print(plot(as(drogi_krakow, "Spatial"),
+       add = TRUE,
+       col = "grey20",
+       lwd = 0.6))
   print(points(czujniki_ppp_id[!miss_vec,],pch="*",col="White"))
-#  print(points(czujniki_ppp_id[2,],pch="*",col="red"))
+  #print(points(czujniki_ppp_id[c(2,21),],pch="*",col="red"))
   print(plot(PM25_gauss))
 }
 
