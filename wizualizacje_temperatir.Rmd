@@ -1,0 +1,215 @@
+```{r}
+library(httr)
+library(jsonlite) 
+library(sp)
+library(spatstat)
+library(sf)
+library(automap)
+library(tmaptools)
+
+```
+
+
+```{r}
+files <- list.files(pattern = "^dane_.*\\.RData$")
+files
+```
+
+```{r}
+lista_danych <- lapply(files, function(f) {
+  e <- new.env()
+  load(f, envir = e)
+  e$list_inst2
+})
+```
+
+```{r}
+lista_danych[[9]][[29]]$current$values
+```
+
+```{r}
+
+get_temp <- function(plik) {
+  n_id <- length(plik)
+  temp <- rep(NA, n_id) 
+  
+  for (i in seq(1,n_id)) {
+    inst <- plik[[i]]
+    
+    logic <- inst$current$values$name == "TEMPERATURE"
+    
+    if (sum(logic) == 1) {
+      temp[i] <- inst$current$values[logic, 2]
+    }
+  }
+  return(temp)
+}
+
+```
+
+
+```{r}
+lista_temp <- lapply(lista_danych, get_temp)
+```
+
+
+
+```{r}
+r <- GET("https://airapi.airly.eu/v2/installations/nearest?lat=50.04666667&lng=20.00486111&maxDistanceKM=25&maxResults=-1", 
+         add_headers(apikey = "TAScUh3ZHNuoMD3VgAr1NhuDyT9KbwW3", Accept = "application/json")
+)
+```
+
+```{r}
+jsonRespText<-content(r,as="text")
+lista_czujnikow<-fromJSON(jsonRespText)
+
+longitude<-lista_czujnikow$location$longitude
+latitude<-lista_czujnikow$location$latitude
+df_czujniki<-data.frame(longitude,latitude)
+df_czujniki$elevation<-lista_czujnikow$elev 
+df_czujniki$id<-lista_czujnikow$id
+head(df_czujniki)
+
+```
+
+
+```{r}
+data_spat<-data.frame(lon=df_czujniki$longitude,lat=df_czujniki$latitude,elev=df_czujniki$elev,id=df_czujniki$id)
+coordinates(data_spat) <- ~lon+lat #określamy, które elementy to koordynaty (potrzebne do ppp)
+proj4string(data_spat) <- CRS("+proj=longlat +datum=WGS84") #określamy, jaki mamy układ
+head(data_spat) # mamy już obiekt w układzie sferycznym, który można automatycznie konwertować
+
+#konwersja do UTM (bo tworzymy ppp, a to jego układ)
+data_UTM <- spTransform(data_spat, CRS("+proj=utm +zone=34 +datum=WGS84"))
+
+#aby utworzyć obiekt ppp, ale tylko z czujnikami w Krakowie, musimy mieć kontur Krakowa, którym przytniemy data_UTM 
+#tworzymy więc odpowiedni obiekt w ukłądzie UTM (zmienna krakowUTM)
+dzielnice<-st_read("dzielnice_Krakowa.shp") #układ odniesienia(CRS) to ETRS89 (Poland CS92)
+# konwertujemy do WGS84
+dzielniceWGS84<-st_transform(dzielnice,crs = 4326) # "4326" to kod dla WGS84
+# zostawiamy tylko kontur miasta 
+krakowWGS84<-st_union(dzielniceWGS84)
+#konwertujemy go na UTM
+krakowUTM<-st_transform(krakowWGS84,CRS("+proj=utm +zone=34 +datum=WGS84"))
+
+#teraz możemy już utworzyć obiekt ppp z danymi ("marks") w punktach (uwaga: dane to id), przycięcie oknem krakowUTM
+#jeszcze zmienna pomocnicza z koordynatami (bo spTransform wprowadza swoje nazwy kolumn z koordynatami)
+XY<-coordinates(data_UTM)
+#i obiekt ppp 2D:
+czujniki_ppp_id<-ppp(x=XY[,1],y=XY[,2],marks=data.frame(elev=data_UTM$elev,id=data_UTM$id),window=as.owin(krakowUTM))
+czujniki_ppp_id$marks$id #mamy od razu tylko te id które są w Krakowie
+```
+```{r}
+czujniki_spdf <- as.data.frame(czujniki_ppp_id)
+coordinates(czujniki_spdf) <- ~x+y # koordynaty
+proj4string(czujniki_spdf) <- CRS("+proj=utm +zone=34 +datum=WGS84") # układ odniesienia
+# dodajemy kolumny z pm
+
+temp_names <- c(
+  "temp_04_8",  "temp_04_16",  "temp_04_21",
+  "temp_09_8",  "temp_09_16",  "temp_09_21",
+  "temp_12_8",  "temp_12_16",  "temp_12_21"
+)
+
+czujniki_spdf@data[temp_names] <- lista_temp
+#teraz mamy 9 dodatkowych kolumn z danymi
+head(czujniki_spdf)
+#View(czujniki_spdf@data)
+plot(czujniki_spdf)
+```
+
+
+
+```{r}
+
+miss <-lapply(temp_names, function(colname) {
+  is.na(czujniki_spdf@data[[colname]])
+})
+
+names(miss) <-paste0("miss_",temp_names)
+
+for (i in 1:9) {
+  miss[[i]][29] <- TRUE
+  miss[[i]][1] <- TRUE
+}
+
+summary(czujniki_spdf[!miss_vec,])
+
+```
+
+```{r}
+bound<-st_as_sf(krakowUTM)
+plot(bound)
+coord<-as.data.frame(st_coordinates(krakowUTM))
+left_down<-c( min(coord$X), min(coord$Y))
+right_up<-c( max(coord$X), max(coord$Y))
+
+size<-c(100,100)
+
+points<- (right_up-left_down)/size
+num_points<-ceiling(points)
+
+grid <- GridTopology(left_down, size,num_points)
+gridpoints <- SpatialPoints(grid, proj4string = CRS("+proj=utm +zone=34 +datum=WGS84"))
+plot(gridpoints) 
+
+g<-st_as_sf(gridpoints)
+cg<-crop_shape(g,bound,polygon = TRUE)
+spgrid <- SpatialPixels(as_Spatial(cg))
+
+plot(spgrid)
+```
+
+```{r}
+for (colname in temp_names) {
+  miss_vec <- miss[[paste0("miss_", colname)]]
+  temp_gauss <- autoKrige(as.formula(paste(colname, "~ 1")), input_data = czujniki_spdf[!miss_vec,],new_data=spgrid,  model="Exp")
+  
+  print(plot(temp_gauss$krige_output[1],main=colname))
+  print(plot(as(drogi_krakow, "Spatial"),
+       add = TRUE,
+       col = "grey20",
+       lwd = 0.6))
+  print(points(czujniki_ppp_id[!miss_vec,],pch="*",col="White"))
+  print(plot(temp_gauss))
+}
+```
+
+
+```{r}
+library(httr)
+library(jsonlite) 
+library(sp)
+library(spatstat)
+library(sf)
+library(automap)
+library(tmaptools)
+library(ggplot2)
+library(osmdata)
+krakowWGS84 <- st_transform(krakowUTM, 4326)
+bbox <- st_bbox(krakowWGS84)
+
+
+library(osmdata)
+krakowWGS84 <- st_transform(krakowUTM, 4326)
+bbox <- st_bbox(krakowWGS84)
+
+main_roads <- c(
+  "motorway",
+  "trunk",
+  "primary",
+  "secondary",
+  "tertiary"
+)
+drogi <- opq(bbox = bbox, timeout = 180) |>
+  add_osm_feature(
+    key = "highway",
+    value = main_roads
+  ) |>
+  osmdata_sf()
+drogi_utm <- st_transform(drogi$osm_lines, st_crs(krakowUTM))
+drogi_krakow <- st_intersection(drogi_utm, krakowUTM)
+
+```
+
